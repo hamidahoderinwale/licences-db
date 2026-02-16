@@ -32,10 +32,6 @@ env/
 *.swo
 *~
 
-# Dataset build artifacts (large files)
-spdx_licenses_dataset/
-*.csv
-
 # OS
 .DS_Store
 Thumbs.db
@@ -43,3 +39,20 @@ Thumbs.db
 # Logs
 *.log
 
+# Dataset build artifacts (large files - don't commit full datasets)
+spdx_licenses_dataset/
+spdx_licenses_dataset_full/
+*.csv
+
+# Full SPDX backup
+spdx_licenses_dataset_full.parquet
+
+# Unrelated project directories
+ai-ecosystem/
+config-analysis-repo/
+hf-viz/
+hfconfig_temp/
+data/
+outputs/
+parquet_fallback/
+path/
