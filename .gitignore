@@ -42,6 +42,7 @@ Thumbs.db
 # Dataset build artifacts (large files - don't commit full datasets)
 spdx_licenses_dataset/
 spdx_licenses_dataset_full/
+spdx_exceptions_dataset/
 *.csv
 
 # Full SPDX backup

@@ -33,11 +33,14 @@ This project provides:
 
 ```
 licences-db/
-├── build_license_dataset.py   # Main script to fetch and build dataset
+├── build_license_dataset.py   # Main script to fetch and build licenses dataset
+├── build_spdx_exceptions.py   # Build SPDX license exceptions (WITH expressions)
 ├── README.md                   # This file
-├── spdx_licenses_dataset/     # Full dataset directory
-├── spdx_licenses_dataset.parquet  # Dataset in Parquet format
-└── spdx_licenses_dataset.csv  # Dataset in CSV format
+├── FSF_SPDX_METADATA.md       # FSF API and GPL compatibility documentation
+├── SPDX_EXCEPTIONS.md         # SPDX exceptions (WITH expressions) documentation
+├── spdx_licenses_dataset/     # Full licenses dataset directory
+├── spdx_licenses_dataset.parquet
+└── spdx_exceptions_dataset/   # Exceptions dataset (optional, run build_spdx_exceptions.py)
 ```
 
 ## Dataset Description
@@ -143,6 +146,15 @@ print(f"Found {len(both_licenses)} licenses used for both")
 - Filtering licenses by usage context (dataset vs model vs both)
 - Educational resources about open-source licensing in AI/ML contexts
 - Automated license compatibility checking for HuggingFace repositories
+
+## SPDX License Exceptions
+
+SPDX exceptions are used in `WITH` expressions (e.g. `GPL-2.0-only WITH Classpath-exception-2.0`). The repository includes:
+
+- **`build_spdx_exceptions.py`** — builds a parallel dataset of all SPDX exceptions
+- **`SPDX_EXCEPTIONS.md`** — documentation on exceptions index, JSON access, and expression usage
+
+Run `python build_spdx_exceptions.py` to build the exceptions dataset locally.
 
 ## Additional Information
 
