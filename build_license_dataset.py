@@ -16,6 +16,7 @@ This will:
    - usage_category: Typical usage on HF ("dataset", "model", "both", "code", "other")
    - full_text: Complete legal text of the license
    - source_url: URL to the official SPDX page for this license
+   - page_markdown: Self-contained markdown document with metadata, license text, and source link
 3. Save locally and optionally push to Hugging Face Hub
 """
 
@@ -172,29 +173,97 @@ def fetch_license_list():
     return data["licenses"]
 
 
-def fetch_license_detail(spdx_id: str) -> str:
-    """Fetch the full legal text for a single license."""
+def fetch_license_detail(spdx_id: str) -> dict:
+    """Fetch the full license detail JSON for a single license."""
     url = f"{SPDX_DETAIL_BASE}{spdx_id}.json"
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
-        detail = resp.json()
-        return detail.get("licenseText", "")
+        return resp.json()
     except Exception as e:
         print(f"  Warning: Could not fetch {spdx_id}: {e}")
+        return {}
+
+
+def build_page_markdown(detail: dict, source_url: str) -> str:
+    """
+    Build a self-contained markdown document for the license.
+    Includes metadata, notes, license text, standard header, and reference links.
+    """
+    if not detail:
         return ""
 
+    license_name = detail.get("name", detail.get("licenseId", ""))
+    spdx_id = detail.get("licenseId", "")
+    license_text = detail.get("licenseText", "")
+    comment = detail.get("comment") or detail.get("licenseComments", "")
+    standard_header = detail.get("standardLicenseHeader", "")
+    see_also = detail.get("seeAlso", [])
+    cross_ref = detail.get("crossRef", [])
 
-def build_dataset(push_to_hub: bool = False, hub_repo: str = None):
-    """Build the full dataset."""
+    sections = []
+
+    # Title and metadata
+    sections.append(f"# {license_name}\n")
+    sections.append(f"**SPDX Identifier:** `{spdx_id}`\n")
+    sections.append(f"**Source:** {source_url}\n")
+
+    if comment:
+        sections.append("## Notes\n\n")
+        sections.append(f"{comment}\n")
+
+    # License text
+    sections.append("## License Text\n\n")
+    sections.append("```\n")
+    sections.append(license_text.strip())
+    sections.append("\n```\n")
+
+    if standard_header:
+        sections.append("## Standard License Header\n\n")
+        sections.append("```\n")
+        sections.append(standard_header.strip())
+        sections.append("\n```\n")
+
+    # Reference links
+    ref_urls = []
+    if see_also:
+        ref_urls.extend(see_also)
+    for ref in cross_ref:
+        if isinstance(ref, dict) and ref.get("url"):
+            ref_urls.append(ref["url"])
+        elif isinstance(ref, str):
+            ref_urls.append(ref)
+
+    if ref_urls:
+        sections.append("## Other References\n\n")
+        for url in ref_urls[:10]:  # Limit to avoid huge markdown
+            sections.append(f"- {url}\n")
+
+    return "".join(sections)
+
+
+def build_dataset(push_to_hub: bool = False, hub_repo: str = None, sample: int = None):
+    """Build the full dataset.
+    
+    Args:
+        push_to_hub: Whether to push to Hugging Face Hub
+        hub_repo: HF repository name for pushing
+        sample: If set, only process this many licenses (for testing)
+    """
     licenses = fetch_license_list()
+    if sample is not None:
+        licenses = licenses[:sample]
+        print(f"  (Sampling first {sample} licenses)")
 
     rows = []
     for i, lic in enumerate(licenses):
         spdx_id = lic["licenseId"]
         print(f"  [{i+1}/{len(licenses)}] Fetching {spdx_id}...")
 
-        full_text = fetch_license_detail(spdx_id)
+        detail = fetch_license_detail(spdx_id)
+        full_text = detail.get("licenseText", "") if detail else ""
+        source_url = lic.get("reference", f"https://spdx.org/licenses/{spdx_id}.html")
+        page_markdown = build_page_markdown(detail, source_url) if detail else ""
 
         usage_category = get_license_usage_category(spdx_id)
         version_info = parse_license_version(spdx_id, lic["name"])
@@ -207,7 +276,8 @@ def build_dataset(push_to_hub: bool = False, hub_repo: str = None):
             "version_modifier": version_info["version_modifier"],
             "usage_category": usage_category,
             "full_text": full_text,
-            "source_url": lic.get("reference", f"https://spdx.org/licenses/{spdx_id}.html"),
+            "source_url": source_url,
+            "page_markdown": page_markdown,
         })
 
     ds = Dataset.from_list(rows)
@@ -232,9 +302,17 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Build SPDX license dataset")
-    parser.add_argument("--push", action="store_true", help="Push to HF Hub")
-    parser.add_argument("--repo", type=str, default=None, help="HF repo (e.g., 'midah/spdx-licenses')")
+    parser.add_argument("--push", action="store_true", help="Push to HF Hub after building")
+    parser.add_argument("--push-only", action="store_true", help="Push existing dataset to HF Hub without rebuilding")
+    parser.add_argument("--repo", type=str, default="midah/hf-dataset-licenses", help="HF repo (default: midah/hf-dataset-licenses)")
+    parser.add_argument("--sample", type=int, default=None, help="Process only N licenses (for testing)")
     args = parser.parse_args()
 
-    build_dataset(push_to_hub=args.push, hub_repo=args.repo)
+    if args.push_only:
+        from datasets import load_from_disk
+        ds = load_from_disk("spdx_licenses_dataset")
+        ds.push_to_hub(args.repo)
+        print(f"Pushed to https://huggingface.co/datasets/{args.repo}")
+    else:
+        build_dataset(push_to_hub=args.push, hub_repo=args.repo, sample=args.sample)
 

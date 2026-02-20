@@ -70,6 +70,7 @@ licences-db/
   - `"other"` - General purpose or unknown usage pattern
 - `full_text` (string): Complete legal text of the license
 - `source_url` (string): URL to the official SPDX page for this license
+- `page_markdown` (string): Self-contained markdown document including license metadata, full text, standard header, and reference links (in addition to `source_url`)
 
 ### How Version Information is Acquired
 
