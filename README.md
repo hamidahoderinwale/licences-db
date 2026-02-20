@@ -71,6 +71,10 @@ licences-db/
 - `full_text` (string): Complete legal text of the license
 - `source_url` (string): URL to the official SPDX page for this license
 - `page_markdown` (string): Self-contained markdown document including license metadata, full text, standard header, and reference links (in addition to `source_url`)
+- `fsf_tags` (string or null): JSON array of FSF classification tags (e.g. `gpl-2-compatible`, `gpl-3-compatible`, `libre`, `non-free`) from the [FSF API](https://github.com/spdx/fsf-api); `null` if not in FSF API
+- `fsf_gpl_compatibility` (string or null): Human-readable FSF GPL compatibility summary (e.g. "GPL-2 and GPL-3 compatible"); `null` if not in FSF API
+
+See `FSF_SPDX_METADATA.md` for details on the FSF metadata API and how to interpret these fields.
 
 ### How Version Information is Acquired
 

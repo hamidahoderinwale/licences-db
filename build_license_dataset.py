@@ -17,6 +17,8 @@ This will:
    - full_text: Complete legal text of the license
    - source_url: URL to the official SPDX page for this license
    - page_markdown: Self-contained markdown document with metadata, license text, and source link
+   - fsf_tags: FSF classification tags (gpl-2-compatible, libre, etc.) from https://github.com/spdx/fsf-api
+   - fsf_gpl_compatibility: Human-readable FSF GPL compatibility summary
 3. Save locally and optionally push to Hugging Face Hub
 """
 
@@ -27,6 +29,7 @@ from datasets import Dataset
 
 SPDX_LICENSES_URL = "https://raw.githubusercontent.com/spdx/license-list-data/main/json/licenses.json"
 SPDX_DETAIL_BASE = "https://raw.githubusercontent.com/spdx/license-list-data/main/json/details/"
+FSF_API_BASE = "https://spdx.github.io/fsf-api/spdx/"  # FSF metadata: GPL compatibility, libre, etc.
 
 # Categorization of licenses based on typical HuggingFace usage
 LICENSE_USAGE_MAP = {
@@ -173,6 +176,49 @@ def fetch_license_list():
     return data["licenses"]
 
 
+def fetch_fsf_metadata(spdx_id: str) -> dict | None:
+    """
+    Fetch FSF (Free Software Foundation) metadata for an SPDX license.
+    Returns tags (gpl-2-compatible, gpl-3-compatible, libre, non-free, etc.)
+    or None if the license is not in the FSF API.
+    See: https://github.com/spdx/fsf-api
+    """
+    url = f"{FSF_API_BASE}{spdx_id}.json"
+    try:
+        resp = requests.get(url, timeout=5)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except Exception:
+        return None
+
+
+def fsf_gpl_compatibility(spdx_id: str) -> str | None:
+    """
+    Interpret FSF tags to produce a human-readable GPL compatibility summary.
+    Returns None if the license is not in the FSF API.
+    """
+    data = fetch_fsf_metadata(spdx_id)
+    if not data:
+        return None
+    tags = set(data.get("tags", []))
+    if "gpl-3-compatible" in tags and "gpl-2-compatible" in tags:
+        return "GPL-2 and GPL-3 compatible"
+    if "gpl-3-compatible" in tags:
+        return "GPL-3 compatible only"
+    if "gpl-2-compatible" in tags:
+        return "GPL-2 compatible only"
+    if "non-free" in tags:
+        return "Non-free (not GPL-compatible)"
+    if "libre" in tags:
+        return "Free (libre) but not marked GPL-compatible"
+    if "viewpoint" in tags:
+        return "Viewpoint-restricted"
+    if "fdl-compatible" in tags:
+        return "FDL-compatible"
+    return "Unknown / not classified by FSF"
+
+
 def fetch_license_detail(spdx_id: str) -> dict:
     """Fetch the full license detail JSON for a single license."""
     url = f"{SPDX_DETAIL_BASE}{spdx_id}.json"
@@ -185,7 +231,7 @@ def fetch_license_detail(spdx_id: str) -> dict:
         return {}
 
 
-def build_page_markdown(detail: dict, source_url: str) -> str:
+def build_page_markdown(detail: dict, source_url: str, fsf_tags: list | None = None, fsf_gpl_compat: str | None = None) -> str:
     """
     Build a self-contained markdown document for the license.
     Includes metadata, notes, license text, standard header, and reference links.
@@ -211,6 +257,15 @@ def build_page_markdown(detail: dict, source_url: str) -> str:
     if comment:
         sections.append("## Notes\n\n")
         sections.append(f"{comment}\n")
+
+    # FSF metadata (GPL compatibility, libre, etc.)
+    if fsf_tags or fsf_gpl_compat:
+        sections.append("## FSF Classification\n\n")
+        if fsf_gpl_compat:
+            sections.append(f"**GPL compatibility:** {fsf_gpl_compat}\n\n")
+        if fsf_tags:
+            sections.append(f"**Tags:** {', '.join(fsf_tags)}\n\n")
+        sections.append("(Source: [FSF License List API](https://github.com/spdx/fsf-api))\n\n")
 
     # License text
     sections.append("## License Text\n\n")
@@ -263,7 +318,18 @@ def build_dataset(push_to_hub: bool = False, hub_repo: str = None, sample: int =
         detail = fetch_license_detail(spdx_id)
         full_text = detail.get("licenseText", "") if detail else ""
         source_url = lic.get("reference", f"https://spdx.org/licenses/{spdx_id}.html")
-        page_markdown = build_page_markdown(detail, source_url) if detail else ""
+
+        # FSF metadata (GPL compatibility, libre, etc.) from https://github.com/spdx/fsf-api
+        fsf_data = fetch_fsf_metadata(spdx_id)
+        fsf_tags = fsf_data.get("tags", []) if fsf_data else []
+        fsf_tags_str = json.dumps(fsf_tags) if fsf_tags else None
+        fsf_gpl_compat = fsf_gpl_compatibility(spdx_id)
+
+        page_markdown = build_page_markdown(
+            detail, source_url,
+            fsf_tags=fsf_tags if fsf_data else None,
+            fsf_gpl_compat=fsf_gpl_compat
+        ) if detail else ""
 
         usage_category = get_license_usage_category(spdx_id)
         version_info = parse_license_version(spdx_id, lic["name"])
@@ -278,6 +344,8 @@ def build_dataset(push_to_hub: bool = False, hub_repo: str = None, sample: int =
             "full_text": full_text,
             "source_url": source_url,
             "page_markdown": page_markdown,
+            "fsf_tags": fsf_tags_str,
+            "fsf_gpl_compatibility": fsf_gpl_compat,
         })
 
     ds = Dataset.from_list(rows)
